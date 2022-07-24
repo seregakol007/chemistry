@@ -1,0 +1,10 @@
+Python 3
+Non-standard packages to install:
+pip install holoviews
+pip install panel
+pip install hvplot
+
+Runnable from console, to run from jupyter notebook cell, replace 
+if __name__ == '__main__':
+with
+if True:
