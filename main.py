@@ -25,8 +25,8 @@ def transform_params_to_string(m_sys, a_params, b_params, k_matrix):
     return f'{m_sys} {a_str} {b_str} {k_str}'
 
 
-def fortran_wrapper(m_sys, a_params, b_params, k_matrix, exe_path):
-    p = Popen([exe_path], stdout=PIPE, stdin=PIPE, stderr=PIPE)
+def fortran_wrapper(m_sys, a_params, b_params, k_matrix):
+    p = Popen([DEFAULT_EXE_PATH], stdout=PIPE, stdin=PIPE, stderr=PIPE)
     arguments_as_str = transform_params_to_string(m_sys, a_params, b_params, k_matrix)
     stdout_data = p.communicate(input=arguments_as_str.encode())[0].decode()
     output = np.array([float(i) for i in stdout_data.split()][1:])  # first output obsolete
@@ -34,20 +34,15 @@ def fortran_wrapper(m_sys, a_params, b_params, k_matrix, exe_path):
     return output
 
 
-exe_selector = pn.widgets.FileSelector(directory='~', only_files=True, file_pattern='*.exe',
-                                       value=[DEFAULT_EXE_PATH], width=WIDTH)
 m_sys_widget = pn.widgets.ArrayInput(name='m_sys values', value=M_SYS_VALUES)
 a_widget = pn.widgets.ArrayInput(name='A params', value=A_PARAMS)
 b_widget = pn.widgets.ArrayInput(name='B params', value=B_PARAMS)
 k_widget = pn.widgets.ArrayInput(name='K matrix', value=K_MATRIX)
 
 
-@pn.depends(m_sys_widget, a_widget, b_widget, k_widget, exe_selector)
-def interactive_plot(m_sys_values, a_params, b_params, k_matrix, files):
-    if len(files) != 1:
-        return pn.pane.Markdown('## Please select exactly one .exe file', width=WIDTH)
-    exe_path = files[0]
-    out_arrays = [fortran_wrapper(m_sys, a_params, b_params, k_matrix, exe_path) for m_sys in m_sys_values]
+@pn.depends(m_sys_widget, a_widget, b_widget, k_widget)
+def interactive_plot(m_sys_values, a_params, b_params, k_matrix):
+    out_arrays = [fortran_wrapper(m_sys, a_params, b_params, k_matrix) for m_sys in m_sys_values]
     df = pd.DataFrame(out_arrays, columns=['out_1', 'out_2', 'out_3', 'out_4'])
     df.index = m_sys_values
     df.index.name = 'm_sys'
