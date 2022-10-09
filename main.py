@@ -6,6 +6,8 @@ import holoviews as hv
 import panel as pn
 import hvplot.pandas  # noqa
 from bokeh.models.widgets.tables import NumberFormatter
+from io import StringIO
+
 hv.extension('bokeh', 'matplotlib')
 
 _formatter = NumberFormatter(format='0.000')
@@ -20,6 +22,7 @@ B_PARAMS = np.array([35.453, -1.0, 1.0, 2.7560, 170.0, 78.4])
 K_MATRIX = np.array([[0., 0., 0.],
                      [0.2, 1., 0.],
                      [-0.25, 0.064, 1.]])  # Maybe transposed
+COLUMNS = ['out_1', 'out_2', 'out_3', 'out_4']
 
 
 def transform_params_to_string(m_sys, a_params, b_params, k_matrix):
@@ -38,17 +41,26 @@ def fortran_wrapper(m_sys, a_params, b_params, k_matrix):
     return output
 
 
+def file_input_to_series(value):
+    print(value)
+    string_io = StringIO(str(value, 'utf-8') if value is not None else '')
+    return pd.read_csv(string_io, delimiter='\t', names=['m_sys', 'from_file'],
+                       index_col='m_sys').squeeze("columns")
+
+
 m_sys_df = pd.DataFrame({'m_sys': M_SYS_VALUES}).transpose()
 m_sys_df.index.name = 'N'
-m_sys_widget = pn.widgets.DataFrame(m_sys_df, formatters={k: _formatter_short for k in m_sys_df.columns}, auto_edit=True,
-                                reorderable=False, sortable=False, width=WIDTH)
+m_sys_widget = pn.widgets.DataFrame(m_sys_df, formatters={k: _formatter_short for k in m_sys_df.columns},
+                                    auto_edit=True,
+                                    reorderable=False, sortable=False, width=WIDTH)
 
 df_components = pd.DataFrame({'A': A_PARAMS, 'B': B_PARAMS}).transpose()
 df_components.index.name = 'component'
 df_components.columns = [f'feature_{i}' for i in df_components.columns]
 
-components_widget = pn.widgets.DataFrame(df_components, formatters={k: _formatter for k in df_components.columns}, auto_edit=True,
-                                reorderable=False, sortable=False, width=WIDTH)
+components_widget = pn.widgets.DataFrame(df_components, formatters={k: _formatter for k in df_components.columns},
+                                         auto_edit=True,
+                                         reorderable=False, sortable=False, width=WIDTH)
 
 df_k = pd.DataFrame(K_MATRIX)
 df_k.index.name = 'K_MATRIX'
@@ -56,18 +68,23 @@ df_k.index.name = 'K_MATRIX'
 k_widget = pn.widgets.DataFrame(df_k, formatters={k: _formatter for k in df_k.columns}, auto_edit=True,
                                 reorderable=False, sortable=False, width=WIDTH)
 
+file_inputs_widgets = [pn.widgets.FileInput(name=i, accept='.csv,.txt') for i in COLUMNS]
 
-@pn.depends(m_sys_widget, components_widget, k_widget)
-def interactive_plot(m_sys_values, components_matrix, k_matrix):
+
+@pn.depends(m_sys_widget, components_widget, k_widget, *file_inputs_widgets)
+def interactive_plot(m_sys_values, components_matrix, k_matrix, *file_inputs):
     m_sys_values = m_sys_values.values[0]
     a_params = components_matrix.iloc[0]
     b_params = components_matrix.iloc[1]
     k_matrix = k_matrix.to_numpy()
     out_arrays = [fortran_wrapper(m_sys, a_params, b_params, k_matrix) for m_sys in m_sys_values]
-    df = pd.DataFrame(out_arrays, columns=['out_1', 'out_2', 'out_3', 'out_4'])
+    df = pd.DataFrame(out_arrays, columns=COLUMNS)
     df.index = m_sys_values
     df.index.name = 'm_sys'
-    plots = [(df[i].hvplot(grid=True) * df[i].hvplot.scatter()).opts(width=WIDTH // 2, show_legend=False) for i in df.columns]
+    plots = [(df[i].hvplot(grid=True) * df[i].hvplot.scatter()).opts(width=WIDTH // 2, show_legend=False) *
+             file_input_to_series(file_input).hvplot.scatter()
+             for i, file_input in zip(df.columns, file_inputs)]
+    plots = [pn.Column(plot, file_input_widget) for plot, file_input_widget in zip(plots, file_inputs_widgets)]
     return pn.Column(pn.Row(plots[0], plots[1]), pn.Row(plots[2], plots[3]), df)
 
 
@@ -84,7 +101,6 @@ def create_app():
 
 
 assert os.path.isfile(DEFAULT_EXE_PATH), f'Cannot find {DEFAULT_EXE_PATH}, please set variable DEFAULT_EXE_PATH'
-
 
 if __name__ == '__main__':
     assert os.path.isfile(DEFAULT_EXE_PATH), f'Cannot find {DEFAULT_EXE_PATH}, please set variable DEFAULT_EXE_PATH'
