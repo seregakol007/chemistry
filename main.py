@@ -42,7 +42,6 @@ def fortran_wrapper(m_sys, a_params, b_params, k_matrix):
 
 
 def file_input_to_series(value):
-    print(value)
     string_io = StringIO(str(value, 'utf-8') if value is not None else '')
     return pd.read_csv(string_io, delimiter='\t', names=['m_sys', 'from_file'],
                        index_col='m_sys').squeeze("columns")
@@ -84,16 +83,21 @@ def interactive_plot(m_sys_values, components_matrix, k_matrix, *file_inputs):
     plots = [(df[i].hvplot(grid=True) * df[i].hvplot.scatter()).opts(width=WIDTH // 2, show_legend=False) *
              file_input_to_series(file_input).hvplot.scatter()
              for i, file_input in zip(df.columns, file_inputs)]
-    plots = [pn.Column(plot, file_input_widget) for plot, file_input_widget in zip(plots, file_inputs_widgets)]
     return pn.Column(pn.Row(plots[0], plots[1]), pn.Row(plots[2], plots[3]), df)
 
 
 def create_app():
     material = pn.template.MaterialTemplate(title='Some chemistry')
-    inputs = pn.Column(m_sys_widget, components_widget, k_widget, width=WIDTH)
-    main = pn.Column(pn.pane.Markdown('## Inputs'),
+    file_widgets = [pn.Row(f'### {file_input.name}:', file_input) for file_input in file_inputs_widgets]
+    inputs = pn.Column(m_sys_widget,
+                       components_widget,
+                       k_widget,
+                       pn.Row(file_widgets[0], file_widgets[1]),
+                       pn.Row(file_widgets[2], file_widgets[3]),
+                       width=WIDTH)
+    main = pn.Column(pn.pane.Markdown('## Input'),
                      inputs,
-                     pn.pane.Markdown('## Plots'),
+                     pn.pane.Markdown('## Output'),
                      interactive_plot,
                      )
     material.main.append(main)
