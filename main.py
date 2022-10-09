@@ -5,7 +5,11 @@ import numpy as np
 import holoviews as hv
 import panel as pn
 import hvplot.pandas  # noqa
+from bokeh.models.widgets.tables import NumberFormatter
 hv.extension('bokeh', 'matplotlib')
+
+_formatter = NumberFormatter(format='0.000')
+_formatter_short = NumberFormatter(format='0.0')
 
 WIDTH = 800
 DEFAULT_EXE_PATH = r'C:\Users\Sergei\Documents\Jupyter\Release\EApp.exe'
@@ -34,25 +38,42 @@ def fortran_wrapper(m_sys, a_params, b_params, k_matrix):
     return output
 
 
-m_sys_widget = pn.widgets.ArrayInput(name='m_sys values', value=M_SYS_VALUES)
-a_widget = pn.widgets.ArrayInput(name='A params', value=A_PARAMS)
-b_widget = pn.widgets.ArrayInput(name='B params', value=B_PARAMS)
-k_widget = pn.widgets.ArrayInput(name='K matrix', value=K_MATRIX)
+m_sys_df = pd.DataFrame({'m_sys': M_SYS_VALUES}).transpose()
+m_sys_df.index.name = 'N'
+m_sys_widget = pn.widgets.DataFrame(m_sys_df, formatters={k: _formatter_short for k in m_sys_df.columns}, auto_edit=True,
+                                reorderable=False, sortable=False, width=WIDTH)
+
+df_components = pd.DataFrame({'A': A_PARAMS, 'B': B_PARAMS}).transpose()
+df_components.index.name = 'component'
+df_components.columns = [f'feature_{i}' for i in df_components.columns]
+
+components_widget = pn.widgets.DataFrame(df_components, formatters={k: _formatter for k in df_components.columns}, auto_edit=True,
+                                reorderable=False, sortable=False, width=WIDTH)
+
+df_k = pd.DataFrame(K_MATRIX)
+df_k.index.name = 'K_MATRIX'
+
+k_widget = pn.widgets.DataFrame(df_k, formatters={k: _formatter for k in df_k.columns}, auto_edit=True,
+                                reorderable=False, sortable=False, width=WIDTH)
 
 
-@pn.depends(m_sys_widget, a_widget, b_widget, k_widget)
-def interactive_plot(m_sys_values, a_params, b_params, k_matrix):
+@pn.depends(m_sys_widget, components_widget, k_widget)
+def interactive_plot(m_sys_values, components_matrix, k_matrix):
+    m_sys_values = m_sys_values.values[0]
+    a_params = components_matrix.iloc[0]
+    b_params = components_matrix.iloc[1]
+    k_matrix = k_matrix.to_numpy()
     out_arrays = [fortran_wrapper(m_sys, a_params, b_params, k_matrix) for m_sys in m_sys_values]
     df = pd.DataFrame(out_arrays, columns=['out_1', 'out_2', 'out_3', 'out_4'])
     df.index = m_sys_values
     df.index.name = 'm_sys'
-    plots = df.hvplot(grid=True) * df.hvplot.scatter()
-    return plots
+    plots = [(df[i].hvplot(grid=True) * df[i].hvplot.scatter()).opts(width=WIDTH // 2, show_legend=False) for i in df.columns]
+    return pn.Column(pn.Row(plots[0], plots[1]), pn.Row(plots[2], plots[3]), df)
 
 
 def create_app():
     material = pn.template.MaterialTemplate(title='Some chemistry')
-    inputs = pn.Column(m_sys_widget, a_widget, b_widget, k_widget, width=WIDTH)
+    inputs = pn.Column(m_sys_widget, components_widget, k_widget, width=WIDTH)
     main = pn.Column(pn.pane.Markdown('## Inputs'),
                      inputs,
                      pn.pane.Markdown('## Plots'),
@@ -60,6 +81,9 @@ def create_app():
                      )
     material.main.append(main)
     return material
+
+
+assert os.path.isfile(DEFAULT_EXE_PATH), f'Cannot find {DEFAULT_EXE_PATH}, please set variable DEFAULT_EXE_PATH'
 
 
 if __name__ == '__main__':
